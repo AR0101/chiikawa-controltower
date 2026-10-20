@@ -1,0 +1,26 @@
+{
+  "name": "chiikawa-controltower",
+  "version": "1.0.0",
+  "description": "Claude Code와 Codex가 하는 일을 아이소메트릭 사무실 캐릭터로 보여주는 관제탑",
+  "bin": {
+    "chiikawa-controltower": "server.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "pets": "node get-pets.js"
+  },
+  "files": [
+    "server.js",
+    "get-pets.js",
+    "public/",
+    "characters/README.txt"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AR0101/chiikawa-controltower.git"
+  }
+}
