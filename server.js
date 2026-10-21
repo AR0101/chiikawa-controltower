@@ -88,7 +88,10 @@ function convert(line, f) {
         if (c.type === 'tool_result') out.push({ ...base, ev: 'PostToolUse', tool_use_id: c.tool_use_id, is_error: !!c.is_error });
       }
     }
-    const text = textOf(msg.content).trim();
+    // IDE·시스템이 붙인 <태그>…</태그> 덩어리는 걷어내고 사람이 쓴 부분만 본다
+    const raw = textOf(msg.content).trim();
+    const cmdRaw = raw.match(/<command-name>/) ? raw : '';
+    const text = cmdRaw || raw.replace(/<([a-z][\w-]*)[^>]*>[\s\S]*?<\/\1>/gi, '').trim();
     if (text && !out.length) {
       const cmd = text.match(/<command-name>\/?([^<]+)<\/command-name>/);
       if (cmd) out.push({ ...base, ev: 'Command', text: '/' + cmd[1].replace(/^\//, '') });
