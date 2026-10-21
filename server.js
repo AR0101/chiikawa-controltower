@@ -92,11 +92,14 @@ function convert(line, f) {
     const raw = textOf(msg.content).trim();
     const cmdRaw = raw.match(/<command-name>/) ? raw : '';
     const text = cmdRaw || raw.replace(/<([a-z][\w-]*)[^>]*>[\s\S]*?<\/\1>/gi, '').trim();
-    if (text && !out.length) {
+    if ((text || raw) && !out.length) {
       const cmd = text.match(/<command-name>\/?([^<]+)<\/command-name>/);
+      const bye = raw.match(/<local-command-stdout>\s*(Goodbye|Bye|See ya|Catch you later)/i);
       if (cmd) out.push({ ...base, ev: 'Command', text: '/' + cmd[1].replace(/^\//, '') });
+      else if (bye) out.push({ ...base, ev: 'Command', text: '/exit' });
+      else if (/^(exit|quit)$/i.test(text)) out.push({ ...base, ev: 'Command', text: '/exit' });
       else if (text.startsWith('[Request interrupted')) out.push({ ...base, ev: 'Interrupted' });
-      else if (!text.startsWith('<')) out.push({ ...base, ev: 'Prompt', text: trunc(text, 140) });
+      else if (text && !text.startsWith('<')) out.push({ ...base, ev: 'Prompt', text: trunc(text, 140) });
     }
   }
   return out;

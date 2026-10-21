@@ -966,6 +966,14 @@ function handle(e) {
       return;
     }
     case 'Command': {
+      if (/^\/(exit|quit)$/.test(e.text)) { // 터미널에서 Claude 를 닫으면 바로 퇴근 (이미 퇴근 중이면 새로 만들지 않는다)
+        const m = s.agents.find(a => a.kind === 'main' && a.sid === e.sessionId && !a.leaving);
+        if (!m) return;
+        leave(s, m, '👋 퇴근');
+        for (const x of s.agents) if (x.kind === 'sub' && x.sid === e.sessionId) leave(s, x, '👋 퇴근');
+        pushLog(s, m, '세션 종료 · 퇴근', ts);
+        return;
+      }
       const m = mainOf(s, e.sessionId, e.who, e.project);
       if (e.text === '/clear') { m.bubble = '🧹 책상 정리 (/clear)'; pushLog(s, m, '/clear · 새 세션으로 이어서 근무', ts); }
       else pushLog(s, m, '명령 ' + e.text, ts);
