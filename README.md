@@ -52,7 +52,7 @@ node server.js
 
 ## Codex도 출근
 
-`~/.codex/sessions/` 에 있는 Codex 기록(최근 3일)도 같이 읽습니다. 같은 폴더에서 일하는 Codex는 Claude와 같은 층에 **Codex**(`>_`)로 출근합니다.
+`~/.codex/sessions/` 에 있는 Codex 기록(최근 3일)도 같이 읽습니다. Codex는 Claude와 같은 사무실에 `>_ Codex · 프로젝트` 이름표를 달고 출근합니다.
 
 Codex는 파일 읽기와 검색도 셸 명령으로 하기 때문에, 명령을 보고 방을 정합니다.
 
