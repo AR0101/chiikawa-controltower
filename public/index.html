@@ -720,9 +720,12 @@ function measurePet(img) {
     return { h: bottom - top + 1, bottom: bottom + 1, cx: (left + right + 1) / 2 };
   } catch { return { h: PET_CELL.h, bottom: PET_CELL.h, cx: PET_CELL.w / 2 }; }
 }
-// 몸통 크기가 치이카와와 비슷해지도록 맞춘 배율. 귀가 키에 들어가는 캐릭터는 귀만큼 크게 (나란히 세워 눈으로 맞춤)
-// 어른 캐릭터는 조금 더 크게: 랏코·쿠리만쥬 1.2배, 세이렌·데카츠요·아노코 1.5배
-const PET_SIZE = { usagi: 1.35, hachiware: 1.1, momonga: 1.04, rakko: 1.2, kurimanju: 1.2, siren: 1.5, dekatsuyo: 1.5, anoko: 1.5 };
+// 크기 = 무리별 배율 × 귀 보정
+// 어른(쿠리만쥬·랏코) 1.2배, 큰 친구들(데카츠요·세이렌·아노코) 1.7배, 나머지 0.8배
+const PET_GROUP = { kurimanju: 1.2, rakko: 1.2, dekatsuyo: 1.7, siren: 1.7, anoko: 1.7 };
+// 그림 키에 귀·털이 들어가 몸통이 작아지는 캐릭터는 그만큼 키운다 (나란히 세워 눈으로 맞춤)
+const PET_EARS = { usagi: 1.35, hachiware: 1.1, momonga: 1.04 };
+const PET_SIZE = new Proxy({}, { get: (_, id) => (PET_GROUP[id] || 0.8) * (PET_EARS[id] || 1) });
 const PET_BASE = 40; // 치이카와가 화면에서 차지하는 키 (월드 픽셀)
 
 function petFor(a) {
