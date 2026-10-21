@@ -77,6 +77,8 @@ button { font: inherit; color: inherit; }
 .proj small { color: var(--muted); font-size: 11px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); }
 .proj > div { min-width: 0; }
 .proj-main { display: flex; flex-direction: column; min-width: 0; }
+.chip.proj-chip { color: #fff; }
+.person .task { font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
 .proj select { font: inherit; font-weight: 600; font-size: 13px; color: var(--ink); background: transparent; border: 0; padding: 0 2px; margin: 0 0 1px -2px; max-width: 100%; cursor: pointer; }
 .proj select:focus-visible { outline: 2px solid var(--accent); border-radius: 4px; }
 .proj .follow { font-size: 11px; color: var(--muted); white-space: nowrap; }
@@ -146,13 +148,10 @@ canvas.dragging { cursor: grabbing; }
   <main class="panel stage" aria-label="사무실">
     <div class="stage-bar">
       <div class="proj">
-        <span class="badge-fl" id="projFloor">1F</span>
         <div class="proj-main">
-          <label class="sr" for="floorSelect">층 선택</label>
-          <select id="floorSelect"></select>
+          <b>Claude 사무실</b>
           <small id="projPath"></small>
         </div>
-        <label class="follow" for="followToggle"><input type="checkbox" id="followToggle" checked> 활동 층 따라가기</label>
       </div>
       <div class="bar-right">
         <span class="status" id="status"><i></i><span id="statusText">연결 중</span></span>
@@ -781,12 +780,14 @@ function drawSprite(a, t, set) {
 // ───────── 세션/근무자 상태 ─────────
 const sessions = new Map(); // projectKey -> office
 let floorsMeta = new Map();
-let selected = null;
+let selected = 'all';
 let follow = true;
 let now = 0;            // 애니메이션 시계 (초)
 let dirtyPanels = true;
 
-function office(key) {
+// 층을 나누지 않고 모든 프로젝트가 한 사무실에서 일한다
+function office() {
+  const key = 'all';
   let s = sessions.get(key);
   if (!s) {
     s = { key, agents: [], log: [], elevatorUntil: 0, lastEvent: 0, tools: new Map(), floorNo: 0, sessionId: '', subN: 0 };
@@ -796,16 +797,26 @@ function office(key) {
 }
 let seedN = 1;
 let curTs = 0; // 처리 중인 이벤트의 시각
-function freeCharIdx(s) {
-  const used = new Set(s.agents.filter(o => !o.gone && !o.leaving).map(o => o.charIdx));
-  let i = 0; while (used.has(i)) i++;
-  return i;
+const hash = str => { let h = 2166136261; for (const c of String(str)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
+// 캐릭터는 세션마다 무작위로 정하되, 같은 세션은 새로고침해도 같은 캐릭터가 나오게 세션 id 로 뽑는다.
+// 지금 사무실에 있는 사람과 겹치지 않게 한 칸씩 비켜간다
+function pickChar(s, key) {
+  const n = Math.max(1, [PETS.main, ...PETS.subs].filter(Boolean).length || [SPRITES.main, ...SPRITES.subs].filter(Boolean).length || 11);
+  const used = new Set(s.agents.filter(o => !o.gone && !o.leaving).map(o => o.charIdx % n));
+  const start = hash(key) % n;
+  for (let i = 0; i < n; i++) if (!used.has((start + i) % n)) return (start + i) % n;
+  return start;
 }
-function makeAgent(s, kind, name, color, sid) {
-  const charIdx = freeCharIdx(s);
+// 프로젝트마다 이름표 색을 하나씩 정해서, 같은 프로젝트에서 일하는 애들이 한눈에 묶여 보이게 한다
+const PROJ_COLORS = ['#d9774f', '#2f7dd1', '#2e9a6b', '#8a5cd6', '#c2558f', '#b07a1f', '#1f8fa0', '#5b6b7f'];
+const projColor = key => PROJ_COLORS[hash(key || '') % PROJ_COLORS.length];
+const projName = key => (floorsMeta.get(key) || {}).name || String(key || '').split('-').filter(Boolean).pop() || '프로젝트';
+const LOOK_ALL = [CLAUDE_LOOK, ...LOOKS];
+function makeAgent(s, kind, name, color, sid, project, charKey) {
+  const charIdx = pickChar(s, charKey || (sid || '') + ':' + Math.random());
   const a = {
-    kind, name, color, sid: sid || '', charIdx, lastTs: curTs || Date.now(),
-    look: charIdx === 0 ? CLAUDE_LOOK : LOOKS[charIdx % LOOKS.length],
+    kind, name, color: projColor(project), project: project || '', task: '', sid: sid || '', charIdx, lastTs: curTs || Date.now(),
+    look: LOOK_ALL[charIdx % LOOK_ALL.length],
     x: ELEVATOR.x, y: ELEVATOR.y, path: [], pose: 'walk', finalPose: 'idle', spot: null,
     bubble: '출근 중', room: '복도', alpha: 0, seed: (seedN++) * 1.37, tools: 0, dirFront: true,
     faceLeft: false,
@@ -815,34 +826,17 @@ function makeAgent(s, kind, name, color, sid) {
   s.elevatorUntil = now + 1.6;
   return a;
 }
-// 세션 하나에 Claude 하나. 같은 프로젝트에서 세션을 여러 개 돌리면 Claude 2, Claude 3… 이 따로 출근한다
-// Codex 세션도 같은 층에 Codex, Codex 2… 로 출근한다
-const MAIN_COLORS = ['#d9774f', '#c2558f', '#3f8f6b', '#6a5fc9', '#b07a1f'];
-const CODEX_COLORS = ['#2f3542', '#3d5a80', '#1f6f78', '#5c4b8a'];
-function mainOf(s, sid, who = 'claude') {
+// 세션 하나에 Claude(또는 Codex) 하나. 번호 대신 프로젝트 이름과 맡은 요청으로 구분한다
+function mainOf(s, sid, who = 'claude', project) {
   const mains = s.agents.filter(a => a.kind === 'main' && !a.leaving && a.who === who);
-  let m = sid ? mains.find(a => a.sid === sid) : mains[0];
+  let m = sid ? mains.find(a => a.sid === sid) : mains.find(a => a.project === project) || mains[0];
   if (!m) {
-    const nums = new Set(mains.map(a => a.mainNo));
-    let n = 1; while (nums.has(n)) n++;
-    const label = who === 'codex' ? 'Codex' : 'Claude';
-    const colors = who === 'codex' ? CODEX_COLORS : MAIN_COLORS;
-    m = makeAgent(s, 'main', n === 1 ? label : label + ' ' + n, colors[(n - 1) % colors.length], sid);
-    m.mainNo = n; m.who = who;
+    m = makeAgent(s, 'main', who === 'codex' ? 'Codex' : 'Claude', null, sid, project, who + ':' + sid);
+    m.who = who;
   }
   m.lastTs = Math.max(m.lastTs, curTs);
   m.leaveAt = 0;
   return m;
-}
-// 지난 기록을 다시 읽으며 생긴 큰 번호를 지금 있는 사람 기준으로 1, 2, 3… 으로 다시 매긴다
-function renumber(s) {
-  for (const who of ['claude', 'codex']) {
-    const label = who === 'codex' ? 'Codex' : 'Claude';
-    const colors = who === 'codex' ? CODEX_COLORS : MAIN_COLORS;
-    s.agents.filter(a => a.kind === 'main' && a.who === who && !a.gone).sort((a, b) => a.mainNo - b.mainNo).forEach((a, i) => {
-      a.mainNo = i + 1; a.name = i ? label + ' ' + (i + 1) : label; a.color = colors[i % colors.length];
-    });
-  }
 }
 function pickSpot(s, room, tag, who) {
   const list = SPOTS[room];
@@ -912,17 +906,17 @@ function describe(name, inp = {}) {
 const TASK_TOOLS = new Set(['Task', 'Agent']);
 
 function pushLog(s, a, text, ts, err) {
-  s.log.unshift({ ts, who: a ? a.name : '', color: a ? a.color : '#999', text, err });
+  s.log.unshift({ ts, who: a ? a.name + ' · ' + projName(a.project) : '', color: a ? a.color : '#999', text, err });
   if (s.log.length > 250) s.log.length = 250;
 }
 
 function resolveActor(s, e) {
-  if (!e.agent_id) return mainOf(s, e.sessionId, e.who);
+  if (!e.agent_id) return mainOf(s, e.sessionId, e.who, e.project);
   let a = s.agents.find(x => x.agentId === e.agent_id && !x.leaving);
   if (!a) {
     const pending = s.agents.filter(x => x.kind === 'sub' && !x.agentId && !x.leaving);
     a = pending.find(x => x.sid === e.sessionId) || pending[0];
-    if (!a) a = makeAgent(s, 'sub', 'agent', SUB_COLORS[s.subN++ % SUB_COLORS.length], e.sessionId);
+    if (!a) a = makeAgent(s, 'sub', 'agent', null, e.sessionId, e.project, e.sessionId + ':' + e.agent_id);
     a.agentId = e.agent_id;
   }
   a.lastTs = Math.max(a.lastTs, curTs);
@@ -930,7 +924,7 @@ function resolveActor(s, e) {
 }
 
 function handle(e) {
-  const s = office(e.project || 'default');
+  const s = office();
   const ts = e.ts || Date.now();
   curTs = ts;
   s.lastEvent = Math.max(s.lastEvent, ts);
@@ -939,14 +933,14 @@ function handle(e) {
   switch (e.ev) {
     case 'Prompt': {
       if (e.agent_id) { const a = resolveActor(s, e); a.bubble = '📋 ' + cut(e.text, 40); return; }
-      const m = mainOf(s, e.sessionId, e.who);
+      const m = mainOf(s, e.sessionId, e.who, e.project);
       goTo(s, m, 'meeting', 'think', '💬 ' + cut(e.text, 40), 'board');
-      m.idleAt = 0;
+      m.idleAt = 0; m.task = cut(e.text, 16);
       pushLog(s, m, '요청 받음 · ' + cut(e.text, 80), ts);
       return;
     }
     case 'Command': {
-      const m = mainOf(s, e.sessionId, e.who);
+      const m = mainOf(s, e.sessionId, e.who, e.project);
       if (e.text === '/clear') { m.bubble = '🧹 책상 정리 (/clear)'; pushLog(s, m, '/clear · 새 세션으로 이어서 근무', ts); }
       else pushLog(s, m, '명령 ' + e.text, ts);
       return;
@@ -970,7 +964,8 @@ function handle(e) {
         const inp = e.tool_input || {};
         const type = inp.subagent_type || 'agent';
         goTo(s, a, 'meeting', 'plan', '📣 ' + cut(inp.description || type, 26) + ' 맡김', 'board');
-        const sub = makeAgent(s, 'sub', type, SUB_COLORS[s.subN++ % SUB_COLORS.length], e.sessionId);
+        const sub = makeAgent(s, 'sub', type, null, e.sessionId, a.project || e.project, e.sessionId + ':' + e.tool_use_id);
+        sub.task = cut(inp.description || '', 16);
         sub.toolUseId = e.tool_use_id;
         goTo(s, sub, 'meeting', 'think', '📋 ' + cut(inp.description || '업무 받는 중', 30));
         sub.bubble = '🛗 출근 · ' + cut(inp.description || type, 26);
@@ -995,7 +990,7 @@ function handle(e) {
       return;
     }
     case 'Stop': {
-      const m = mainOf(s, e.sessionId, e.who);
+      const m = mainOf(s, e.sessionId, e.who, e.project);
       goTo(s, m, 'lounge', 'idle', '🍞 작업 끝 · 다음 지시 대기', 'sofa');
       // Codex 는 codex exec 로 불릴 때마다 새 세션이 생기니, 일을 마치면 잠깐 쉬고 퇴근한다
       if (m.who === 'codex') m.leaveAt = now + 20;
@@ -1003,9 +998,9 @@ function handle(e) {
       return;
     }
     case 'Interrupted': {
-      const m = mainOf(s, e.sessionId, e.who);
+      const m = mainOf(s, e.sessionId, e.who, e.project);
       goTo(s, m, 'lounge', 'idle', '✋ 중단됨 · 식빵 굽는 중', 'sofa');
-      for (const x of s.agents) if (x.kind === 'sub') leave(s, x);
+      for (const x of s.agents) if (x.kind === 'sub' && x.sid === e.sessionId) leave(s, x);
       pushLog(s, m, '사용자가 중단함', ts);
       return;
     }
@@ -1143,10 +1138,17 @@ function drawOverlays(s, t) {
     const footY = (iso(a.x, a.y)[1]) * E.s + E.oy;
     ctx.globalAlpha = a.alpha;
     // 이름표
+    const icon = a.kind === 'main' ? (a.who === 'codex' ? '>_' : '✳') : '↳';
+    const tag = `${icon} ${a.name} · ${projName(a.project)}`;
     ctx.font = `600 10px ${font}`;
-    const nw = ctx.measureText(a.name).width + 10;
-    ctx.fillStyle = a.color; roundRect(sx - nw / 2, footY + 5, nw, 14, 7); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(a.name, sx, footY + 15.5);
+    const nw = ctx.measureText(tag).width + 12;
+    ctx.fillStyle = a.color; roundRect(sx - nw / 2, footY + 5, nw, 15, 7.5); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(tag, sx, footY + 16);
+    if (a.task) { // 맡은 요청
+      ctx.font = `500 9.5px ${font}`;
+      ctx.lineWidth = 3; ctx.strokeStyle = pal.bubble; ctx.strokeText(a.task, sx, footY + 31);
+      ctx.fillStyle = pal.bubbleInk; ctx.fillText(a.task, sx, footY + 31);
+    }
     // 생각 구름
     if (!a.path.length && (a.pose === 'think' || a.pose === 'stuck')) {
       const k = Math.floor(t * 2.5) % 4;
@@ -1225,72 +1227,29 @@ const ago = ms => { const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
 const hhmm = ms => { const d = new Date(ms); return d.toTimeString().slice(0, 8); };
 const ACTIVE_MS = 120000;
 
-function floorsSorted() {
-  const keys = new Set([...floorsMeta.keys(), ...sessions.keys()]);
-  const list = [...keys].map(k => {
-    const m = floorsMeta.get(k) || {}; const s = sessions.get(k);
-    return { key: k, name: m.name || k, cwd: m.cwd || '', last: Math.max(m.lastActive || 0, s ? s.lastEvent : 0) };
-  });
-  list.sort((a, b) => a.key.localeCompare(b.key));
-  list.forEach((f, i) => { f.no = i + 1; office(f.key).floorNo = f.no; });
-  return list;
-}
-function selectFloor(key, flash) {
-  if (selected === key) return;
-  selected = key; dirtyPanels = true;
-  const s = sessions.get(key);
-  if (flash && s) { floorFlash = { until: now + 1.3, text: '▲ ' + s.floorNo + 'F' }; s.elevatorUntil = now + 1.3; }
-}
 function renderPanels() {
   dirtyPanels = false;
-  const floors = floorsSorted();
-  if (follow) {
-    // 보고 있는 층이 20초 넘게 조용할 때만 가장 최근에 움직인 층으로 옮긴다
-    const cur = floors.find(f => f.key === selected);
-    const latest = floors.slice().sort((a, b) => b.last - a.last)[0];
-    if (latest && latest.key !== selected && (!cur || Date.now() - cur.last > 20000)) selectFloor(latest.key, selected != null);
-  }
-  const on = floors.filter(f => Date.now() - f.last < ACTIVE_MS).length;
-  const sel = $('floorSelect');
-  if (document.activeElement !== sel) {
-    sel.innerHTML = floors.slice().reverse().map(f => {
-      const s = sessions.get(f.key);
-      const n = s ? s.agents.length : 0;
-      const active = Date.now() - f.last < ACTIVE_MS;
-      const state = active ? `● 근무 ${n}명` : f.last ? '불 꺼짐 · ' + ago(f.last) : '불 꺼짐';
-      return `<option value="${esc(f.key)}"${f.key === selected ? ' selected' : ''}>${f.no}F  ${esc(f.name)}  —  ${state}</option>`;
-    }).join('') || '<option>아직 프로젝트가 없습니다</option>';
-  }
-  sel.title = `${floors.length}층 건물 · 불 켜진 층 ${on}개`;
-
-  const s = selected ? sessions.get(selected) : null;
-  const meta = floorsMeta.get(selected) || {};
-  $('projFloor').textContent = s ? s.floorNo + 'F' : '–';
-  $('projPath').textContent = (meta.cwd || '') + (s && s.sessionId ? '  · 세션 ' + s.sessionId.slice(0, 8) : '');
+  const s = sessions.get('all');
   const agents = s ? s.agents : [];
+  const projs = [...new Set(agents.map(a => a.project))];
+  $('projPath').textContent = agents.length ? `근무 ${agents.length}명 · ${projs.map(projName).join(', ')}` : '아직 아무도 출근하지 않았습니다';
   $('peopleCount').textContent = agents.length ? agents.length + '명' : '';
-  $('people').innerHTML = agents.map(a => `<li class="person">
-      <span class="av" style="background:${a.color}">${a.kind === 'main' ? (a.who === 'codex' ? '&gt;_' : '✳') : esc(a.name.slice(0, 1).toUpperCase())}</span>
-      <div style="min-width:0"><div class="nm"><span>${esc(a.name)}</span><span class="chip">${esc(a.leaving ? '퇴근 중' : a.room)}</span></div><div class="act">${esc(a.bubble)}</div></div>
+  const sorted = [...agents].sort((a, b) => a.project.localeCompare(b.project) || (a.kind === 'main' ? -1 : 1));
+  $('people').innerHTML = sorted.map(a => `<li class="person">
+      <span class="av" style="background:${a.color}">${a.kind === 'main' ? (a.who === 'codex' ? '&gt;_' : '✳') : '↳'}</span>
+      <div style="min-width:0"><div class="nm"><span>${esc(a.name)}</span><span class="chip proj-chip" style="background:${a.color}">${esc(projName(a.project))}</span><span class="chip">${esc(a.leaving ? '퇴근 중' : a.room)}</span></div>
+      ${a.task ? `<div class="task">📋 ${esc(a.task)}</div>` : ''}<div class="act">${esc(a.bubble)}</div></div>
       <span class="cnt" title="도구 사용 횟수">${a.tools}</span></li>`).join('') || '<li class="nobody">지금은 아무도 없습니다</li>';
-  $('log').innerHTML = s && s.log.length ? s.log.slice(0, 120).map(l => `<li><time>${hhmm(l.ts)}</time><span class="d" style="background:${l.color}"></span><span class="t ${l.err ? 'err' : ''}"><b>${esc(l.who)}</b> ${esc(l.text)}</span></li>`).join('') : '<li class="nobody" style="display:block;border:0">이 층의 활동이 여기에 쌓입니다</li>';
+  $('log').innerHTML = s && s.log.length ? s.log.slice(0, 150).map(l => `<li><time>${hhmm(l.ts)}</time><span class="d" style="background:${l.color}"></span><span class="t ${l.err ? 'err' : ''}"><b>${esc(l.who)}</b> ${esc(l.text)}</span></li>`).join('') : '<li class="nobody" style="display:block;border:0">활동이 여기에 쌓입니다</li>';
   const empty = $('emptyNote');
-  if (mode === 'live' && !floors.length) { empty.hidden = false; empty.textContent = '~/.claude/projects 에서 세션을 찾지 못했습니다. Claude Code를 실행하면 여기로 출근합니다.'; }
-  else if (s && !agents.length) { empty.hidden = false; empty.textContent = '이 층은 지금 불이 꺼져 있습니다. 이 프로젝트에서 Claude Code가 일하면 엘리베이터를 타고 출근합니다.'; }
+  if (!agents.length) { empty.hidden = false; empty.textContent = mode === 'live' ? 'Claude Code나 Codex가 일을 시작하면 엘리베이터를 타고 출근합니다.' : '곧 출근합니다.'; }
   else empty.hidden = true;
 }
-$('floorSelect').addEventListener('change', e => {
-  follow = false; $('followToggle').checked = false;
-  selectFloor(e.target.value, true);
-  e.target.blur();
-  renderPanels();
-});
 $('sideToggle').addEventListener('click', () => {
   const on = document.querySelector('.app').classList.toggle('side-flip');
   $('sideToggle').setAttribute('aria-pressed', String(on));
   setTimeout(fit, 0);
 });
-$('followToggle').addEventListener('change', e => { follow = e.target.checked; dirtyPanels = true; });
 setInterval(() => { if (dirtyPanels) renderPanels(); }, 300);
 setInterval(() => { dirtyPanels = true; }, 5000);
 
@@ -1313,7 +1272,6 @@ function startLive() {
       for (const e of data.events) handle(e);
       for (const s of sessions.values()) {
         settleInstantly(s);
-        renumber(s);
         // 오래 조용했던 층은 퇴근 처리, 나머지는 현재 자세 유지
         if (Date.now() - s.lastEvent > 30 * 60000) s.agents = [];
         else for (const a of s.agents) {
@@ -1322,7 +1280,6 @@ function startLive() {
         }
         s.agents = s.agents.filter(a => !a.gone);
       }
-      for (const s of sessions.values()) renumber(s);
       setStatus('live', 'LIVE');
     } else if (data.type === 'event') handle(data.event);
     else if (data.type === 'floors') setFloors(data.floors);
