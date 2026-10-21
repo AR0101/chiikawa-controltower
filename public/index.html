@@ -201,24 +201,24 @@ const MAP_W = 22, MAP_H = 16, WALL_H = 2.5;
 const iso = (x, y, z = 0) => [(x - y) * TW / 2, (x + y) * TH / 2 - z * ZH];
 
 const ROOMS = {
-  library: { name: '자료실',     x0: 0,  y0: 0, x1: 8,  y1: 7 },
-  dev:     { name: '개발실',     x0: 8,  y0: 0, x1: 22, y1: 7 },
+  library: { name: '자료실',     x0: 0,  y0: 0, x1: 6,  y1: 7 },
+  dev:     { name: '개발실',     x0: 6,  y0: 0, x1: 22, y1: 7 },
   hall:    { name: '복도',       x0: 0,  y0: 7, x1: 22, y1: 9 },
-  meeting: { name: '회의실',     x0: 0,  y0: 9, x1: 7,  y1: 16 },
-  lounge:  { name: '라운지',     x0: 7,  y0: 9, x1: 13, y1: 16 },
-  server:  { name: '서버실',     x0: 13, y0: 9, x1: 22, y1: 16 },
+  meeting: { name: '회의실',     x0: 0,  y0: 9, x1: 5,  y1: 16 },
+  lounge:  { name: '라운지',     x0: 5,  y0: 9, x1: 14, y1: 16 },
+  server:  { name: '서버실',     x0: 14, y0: 9, x1: 22, y1: 16 },
 };
 const DOORS = {
   library: { x: 4,   inY: 6.3 }, dev: { x: 15, inY: 6.3 },
-  meeting: { x: 3.5, inY: 9.7 }, lounge: { x: 10, inY: 9.7 }, server: { x: 17, inY: 9.7 },
+  meeting: { x: 3.5, inY: 9.7 }, lounge: { x: 9.5, inY: 9.7 }, server: { x: 17, inY: 9.7 },
 };
 const HALL_Y = 8;
 const ELEVATOR = { x: 0.7, y: 8 };
 
 function roomAt(x, y) {
-  if (y < 7) return x < 8 ? 'library' : 'dev';
+  if (y < 7) return x < 6 ? 'library' : 'dev';
   if (y < 9) return 'hall';
-  return x < 7 ? 'meeting' : x < 13 ? 'lounge' : 'server';
+  return x < 5 ? 'meeting' : x < 14 ? 'lounge' : 'server';
 }
 function planPath(from, to) {
   const ra = roomAt(from.x, from.y), rb = roomAt(to.x, to.y);
@@ -386,45 +386,51 @@ function sofa(x, y, w) {
 function rug(x, y, w, d, color) { RUGS.push([x, y, w, d, color]); }
 const RUGS = [];
 
-// 자료실 / 정보검색실
-shelfBack(0.4, 0.05, 2.2); shelfBack(2.8, 0.05, 2.2); shelfBack(5.2, 0.05, 2.4);
+// 자료실 / 정보검색실 (좁게)
+shelfBack(0.4, 0.05, 2.5); shelfBack(3.1, 0.05, 2.6);
 shelfSide(0.05, 1.0, 2.4); shelfSide(0.05, 3.6, 2.2);
-{ const t1 = desk(1.7, 2.6, 2.2, 0.9, '#c8ad86', false); spot('library', 2.25, 2.25, 'front', t1); spot('library', 3.35, 2.25, 'front', t1);
-  const t2 = desk(1.7, 4.6, 2.2, 0.9, '#c8ad86', false); spot('library', 2.25, 4.25, 'front', t2); spot('library', 3.35, 4.25, 'front', t2); }
+{ const t1 = desk(1.5, 2.6, 2.0, 0.9, '#c8ad86', false); spot('library', 2.0, 2.25, 'front', t1); spot('library', 3.0, 2.25, 'front', t1);
+  const t2 = desk(1.5, 4.6, 2.0, 0.9, '#c8ad86', false); spot('library', 2.0, 4.25, 'front', t2); spot('library', 3.0, 4.25, 'front', t2); }
 // 정보검색실 PC (웹·브라우저)
-{ const p1 = desk(4.9, 2.7, 1.3, 0.7, '#e6e9ee', true); spot('library', 5.55, 3.85, 'back', p1, 'web'); stool(5.55, 3.85);
-  const p2 = desk(4.9, 4.7, 1.3, 0.7, '#e6e9ee', true); spot('library', 5.55, 5.85, 'back', p2, 'web'); stool(5.55, 5.85);
-  const p3 = desk(6.4, 2.7, 1.3, 0.7, '#e6e9ee', true); spot('library', 7.05, 3.85, 'back', p3, 'web'); stool(7.05, 3.85); }
-plant(7.5, 0.9, 0.9);
+{ const p1 = desk(4.2, 2.7, 1.3, 0.7, '#e6e9ee', true); spot('library', 4.85, 3.85, 'back', p1, 'web'); stool(4.85, 3.85);
+  const p2 = desk(4.2, 4.7, 1.3, 0.7, '#e6e9ee', true); spot('library', 4.85, 5.85, 'back', p2, 'web'); stool(4.85, 5.85); }
 
 // 개발실: 아이맥 책상 두 줄
 for (const row of [1.3, 4.0]) for (let i = 0; i < 6; i++) {
-  const x = 9 + i * 2;
+  const x = 7.4 + i * 2.35;
   const d = desk(x, row, 1.6, 0.75, '#eef0f3', true);
   spot('dev', x + 0.8, row + 1.15, 'back', d); stool(x + 0.8, row + 1.15);
 }
-plant(21.4, 0.6); plant(8.6, 6.4, 0.8);
+plant(21.4, 0.6); plant(6.6, 6.4, 0.8);
 
-// 회의실
-{ const t = desk(1.8, 11.4, 3.6, 1.4, '#efe9df', false);
-  for (const x of [2.4, 3.6, 4.8]) { spot('meeting', x, 11.05, 'front', t); spot('meeting', x, 13.2, 'back', t); stool(x, 13.2); } }
+// 회의실 (좁게)
+{ const t = desk(1.4, 11.4, 3.0, 1.4, '#efe9df', false);
+  for (const x of [2.0, 2.9, 3.8]) { spot('meeting', x, 11.05, 'front', t); spot('meeting', x, 13.2, 'back', t); stool(x, 13.2); } }
 spot('meeting', 0.8, 11.3, 'back', null, 'board'); spot('meeting', 0.8, 12.6, 'back', null, 'board');
-plant(6.4, 15.4, 0.9); plant(0.6, 15.4, 0.9);
+plant(4.4, 15.4, 0.9); plant(0.6, 15.4, 0.9);
 
-// 라운지
-rug(7.7, 12.4, 4.4, 2.6, '#c9d9cb');
-sofa(8.1, 10.8, 3.2);
-for (const x of [8.7, 9.7, 10.7]) spot('lounge', x, 11.45, 'front', null, 'sofa');
-desk(8.5, 12.9, 2.4, 0.8, '#d7c6a8', false);
-{ const c = add(12.3 + 9.8, () => { box(11.9, 9.35, 0, 0.9, 0.6, 0.9, '#d3d8de'); box(12.05, 9.4, 0.9, 0.5, 0.4, 0.55, '#3c4450'); box(12.2, 9.8, 0.92, 0.12, 0.12, 0.12, '#f4f4f4'); });
-  spot('lounge', 12.3, 10.5, 'back', c, 'coffee'); }
-spot('lounge', 8.2, 14.6, 'front', null); spot('lounge', 11.6, 14.6, 'front', null);
-plant(12.5, 15.4); plant(7.5, 15.4, 0.9);
+// 라운지 (넓게): 소파 두 개, 방석 여섯 개, 커피 머신. 쉴 자리 13개
+function cushion(x, y, color) {
+  add(x + y - 0.3, () => {
+    box(x - 0.32, y - 0.32, 0, 0.64, 0.64, 0.2, color);
+    const [a, b] = iso(x, y, 0.22);
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(a, b, 17, 8.5, 0, 0, Math.PI * 2); ctx.fill();
+  });
+}
+rug(5.6, 12.3, 7.8, 3.3, '#c9d9cb');
+sofa(5.9, 10.8, 3.2); sofa(9.7, 10.8, 3.2);
+for (const x of [6.5, 7.5, 8.5, 10.3, 11.3, 12.3]) spot('lounge', x, 11.45, 'front', null, 'sofa');
+desk(6.3, 12.7, 2.4, 0.7, '#d7c6a8', false); desk(10.1, 12.7, 2.4, 0.7, '#d7c6a8', false);
+{ const colors = ['#f2b8c6', '#a9d3f5', '#f7d98b', '#b9e3c0', '#d6c4f0', '#f5c29a'];
+  [6.1, 7.4, 8.7, 10.0, 11.3, 12.6].forEach((x, i) => { cushion(x, 14.7, colors[i]); spot('lounge', x, 14.7, 'front', null, 'sofa'); }); }
+{ const c = add(13.3 + 9.8, () => { box(12.9, 9.35, 0, 0.9, 0.6, 0.9, '#d3d8de'); box(13.05, 9.4, 0.9, 0.5, 0.4, 0.55, '#3c4450'); box(13.2, 9.8, 0.92, 0.12, 0.12, 0.12, '#f4f4f4'); });
+  spot('lounge', 13.3, 10.5, 'back', c, 'coffee'); }
+plant(13.5, 15.5); plant(5.5, 15.5, 0.9); plant(5.5, 9.6, 0.8);
 
 // 서버실
 const RACKS = [];
 for (const ry of [10.0, 12.8]) for (let i = 0; i < 5; i++) {
-  const rx = 14.0 + i * 1.05;
+  const rx = 14.5 + i * 1.02;
   const r = rack(rx, ry);
   RACKS.push(r);
   spot('server', rx + 0.45, ry + 1.35, 'back', r);
@@ -433,7 +439,7 @@ for (const ry of [10.0, 12.8]) for (let i = 0; i < 5; i++) {
   const c2 = desk(19.8, 13.0, 1.5, 0.8, '#e1e5ea', true); spot('server', 20.55, 14.2, 'back', c2, 'console'); stool(20.55, 14.2); }
 
 // 복도
-plant(21.4, 7.4, 0.9); plant(6.9, 7.35, 0.8);
+plant(21.4, 7.4, 0.9); plant(5.6, 7.35, 0.8);
 for (let i = 0; i < 4; i++) spot('hall', 2 + i * 0.7, 8.4, 'front', null);
 
 // 유리 칸막이 (1칸씩 쪼개야 깊이 정렬이 맞는다)
@@ -441,8 +447,8 @@ const GLASS = [];
 function glassY(yy, a, b) { for (let x = a; x < b - 1e-6; x += 1) { const e = Math.min(b, x + 1); GLASS.push(['y', yy, x, e]); } }
 function glassX(xx, a, b) { for (let y = a; y < b - 1e-6; y += 1) { const e = Math.min(b, y + 1); GLASS.push(['x', xx, y, e]); } }
 glassY(7, 0, 3.3); glassY(7, 4.7, 14.3); glassY(7, 15.7, 22);
-glassY(9, 0, 2.8); glassY(9, 4.2, 7); glassY(9, 13, 16.3); glassY(9, 17.7, 22);
-glassX(8, 0, 7); glassX(7, 9, 16); glassX(13, 9, 16);
+glassY(9, 0, 2.8); glassY(9, 4.2, 5); glassY(9, 14, 16.3); glassY(9, 17.7, 22);
+glassX(6, 0, 7); glassX(5, 9, 16); glassX(14, 9, 16);
 for (const [ax, c, a, b] of GLASS) {
   add(ax === 'y' ? (a + b) / 2 + c : c + (a + b) / 2, () => {
     const H = 1.75;
@@ -466,7 +472,7 @@ function drawFloors() {
   ctx.font = '600 11px ' + getComputedStyle(document.body).getPropertyValue('--font-body');
   ctx.fillStyle = pal.label;
   ctx.textAlign = 'center';
-  const labels = { library: [3.4, 6.5, '자료실 · 정보검색실'], dev: [12, 6.6, '개발실'], meeting: [3.8, 15.4, '회의실'], lounge: [10, 15.6, '라운지'], server: [16.5, 15.6, '서버실'] };
+  const labels = { library: [2.9, 6.5, '자료실 · 정보검색실'], dev: [13, 6.6, '개발실'], meeting: [2.6, 15.4, '회의실'], lounge: [9.5, 15.75, '라운지'], server: [18, 15.6, '서버실'] };
   for (const [, [x, y, s]] of Object.entries(labels)) { const [a, b] = iso(x, y); ctx.fillText(s, a, b); }
 }
 function drawWalls(sess, t) {
@@ -1180,7 +1186,8 @@ function drawOverlays(s, t) {
       ctx.font = `700 11px ${font}`; ctx.fillText(a.pose === 'stuck' ? '!?' : '.'.repeat(k || 1).padEnd(3, ' '), sx + 27, sy - 11.5);
     }
     // 말풍선
-    if (a.bubble && (!narrow || a.kind === 'main')) {
+    const resting = !a.path.length && a.pose === 'idle' && a.spot && a.spot.room === 'lounge'; // 쉬는 중엔 말풍선 없이 zzz 만
+    if (a.bubble && !resting && (!narrow || a.kind === 'main')) {
       ctx.font = `500 11px ${font}`;
       let txt = a.bubble;
       while (ctx.measureText(txt).width > 168 && txt.length > 4) txt = txt.slice(0, -2);
