@@ -703,22 +703,28 @@ async function loadPets() {
 // 펫 시트는 캐릭터마다 칸을 꽉 채우게 따로 그려져 있어서 크기가 제각각이다.
 // 대기 동작 칸에서 실제로 그려진 부분(키·발 위치·가운데)을 재서 같은 기준으로 맞춘다.
 function measurePet(img) {
+  const fallback = { h: PET_CELL.h, bottom: PET_CELL.h, cx: PET_CELL.w / 2, area: PET_CELL.w * PET_CELL.h };
   try {
     const c = document.createElement('canvas');
-    c.width = PET_CELL.w * 6; c.height = PET_CELL.h;
+    c.width = img.width; c.height = img.height;
     const g = c.getContext('2d', { willReadFrequently: true });
-    g.drawImage(img, 0, 0, c.width, c.height, 0, 0, c.width, c.height);
+    g.drawImage(img, 0, 0);
     const d = g.getImageData(0, 0, c.width, c.height).data;
-    let top = PET_CELL.h, bottom = 0, left = PET_CELL.w, right = 0;
-    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
-      if (d[(y * c.width + x) * 4 + 3] < 40) continue;
-      const cx = x % PET_CELL.w;
-      if (y < top) top = y; if (y > bottom) bottom = y;
-      if (cx < left) left = cx; if (cx > right) right = cx;
+    // 동작(줄)마다 실제로 그려진 범위를 잰다
+    const rows = {};
+    for (const [name, [r, n]] of Object.entries(PET_ROWS)) {
+      let top = PET_CELL.h, bottom = 0, left = PET_CELL.w, right = 0;
+      for (let y = 0; y < PET_CELL.h; y++) for (let x = 0; x < PET_CELL.w * n; x++) {
+        if (d[((r * PET_CELL.h + y) * c.width + x) * 4 + 3] < 40) continue;
+        const cx = x % PET_CELL.w;
+        if (y < top) top = y; if (y > bottom) bottom = y;
+        if (cx < left) left = cx; if (cx > right) right = cx;
+      }
+      rows[name] = bottom > top ? { h: bottom - top + 1, bottom: bottom + 1, cx: (left + right + 1) / 2, area: (right - left + 1) * (bottom - top + 1) } : null;
     }
-    if (bottom <= top) throw 0;
-    return { h: bottom - top + 1, bottom: bottom + 1, cx: (left + right + 1) / 2 };
-  } catch { return { h: PET_CELL.h, bottom: PET_CELL.h, cx: PET_CELL.w / 2 }; }
+    const idle = rows.idle || fallback;
+    return { ...idle, rows };
+  } catch { return { ...fallback, rows: {} }; }
 }
 // 크기 = 무리별 배율 × 귀 보정
 // 어른(쿠리만쥬·랏코) 1.2배, 아노코 1.7배, 데카츠요·세이렌 2.2배(1.7의 1.3배), 나머지 0.8배
@@ -743,7 +749,10 @@ function drawPet(a, t, pet) {
   const [r, n] = PET_ROWS[row];
   const frame = Math.floor((t + a.seed) * (walking ? 12 : 8)) % n;
   const m = pet.m;
-  const k = PET_BASE * (PET_SIZE[pet.id] || 1) / m.h;   // 시트 픽셀 → 월드 픽셀
+  const rm = m.rows[row] || m;
+  // 엎드려 기는 그림처럼 이 동작이 서 있을 때보다 눈에 띄게 작게 그려져 있으면, 덩치(면적)가 같아 보이게 키운다
+  const grow = Math.sqrt(m.area / rm.area);
+  const k = PET_BASE * (PET_SIZE[pet.id] || 1) / m.h * (grow > 1.08 ? Math.min(grow, 1.5) : 1);
   const H = m.h * k, w = 120 * k;                       // 화면에서의 키, 그림자 폭
   ctx.save();
   ctx.translate(sx, sy);
@@ -751,7 +760,7 @@ function drawPet(a, t, pet) {
   ctx.fillStyle = 'rgba(0,0,0,0.14)'; ctx.beginPath(); ctx.ellipse(0, 0, w * 0.32, 4, 0, 0, Math.PI * 2); ctx.fill();
   ctx.imageSmoothingQuality = 'high';
   // 발(그림의 맨 아래)이 바닥점에, 몸 가운데가 x=0 에 오도록
-  ctx.drawImage(pet.img, frame * PET_CELL.w, r * PET_CELL.h, PET_CELL.w, PET_CELL.h, -m.cx * k, -m.bottom * k + 2, PET_CELL.w * k, PET_CELL.h * k);
+  ctx.drawImage(pet.img, frame * PET_CELL.w, r * PET_CELL.h, PET_CELL.w, PET_CELL.h, -rm.cx * k, -rm.bottom * k + 2, PET_CELL.w * k, PET_CELL.h * k);
   if (pose === 'idle' && !walking && a.spot && a.spot.room === 'lounge') { ctx.fillStyle = '#8b97a8'; ctx.font = '700 9px sans-serif'; const z = (t * 0.7 + a.seed) % 1; ctx.globalAlpha = a.alpha * (1 - z); ctx.fillText('z', w * 0.3 + z * 5, -H * 0.9 - z * 8); }
   ctx.restore();
   a.headScreen = [sx, sy - H + 6];
