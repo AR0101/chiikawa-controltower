@@ -721,8 +721,8 @@ function measurePet(img) {
   } catch { return { h: PET_CELL.h, bottom: PET_CELL.h, cx: PET_CELL.w / 2 }; }
 }
 // 크기 = 무리별 배율 × 귀 보정
-// 어른(쿠리만쥬·랏코) 1.2배, 큰 친구들(데카츠요·세이렌·아노코) 1.7배, 나머지 0.8배
-const PET_GROUP = { kurimanju: 1.2, rakko: 1.2, dekatsuyo: 1.7, siren: 1.7, anoko: 1.7 };
+// 어른(쿠리만쥬·랏코) 1.2배, 아노코 1.7배, 데카츠요·세이렌 2.2배(1.7의 1.3배), 나머지 0.8배
+const PET_GROUP = { kurimanju: 1.2, rakko: 1.2, anoko: 1.7, dekatsuyo: 2.2, siren: 2.2 };
 // 그림 키에 귀·털이 들어가 몸통이 작아지는 캐릭터는 그만큼 키운다 (나란히 세워 눈으로 맞춤)
 const PET_EARS = { usagi: 1.35, hachiware: 1.1, momonga: 1.04 };
 const PET_SIZE = new Proxy({}, { get: (_, id) => (PET_GROUP[id] || 0.8) * (PET_EARS[id] || 1) });
@@ -950,7 +950,7 @@ function resolveActor(s, e) {
     a.agentId = e.agent_id;
   }
   a.lastTs = Math.max(a.lastTs, curTs);
-  a.leaveAt = 0; // 아직 일하는 중
+  if (!a.handedBack) a.leaveAt = 0; // 아직 일하는 중 (결과를 넘긴 뒤에는 퇴근 예약을 지우지 않는다)
   return a;
 }
 
@@ -1016,7 +1016,8 @@ function handle(e) {
         pushLog(s, a, `서브에이전트 ${type} 호출 · ${cut(inp.description, 60)}`, ts);
       } else {
         const d = describe(e.tool_name, e.tool_input);
-        if (a.kind === 'sub' && /handback/i.test(e.tool_name || '')) a.handedBack = true;
+        // 결과 넘기기는 서브에이전트의 마지막 일. 끝났다는 기록이 늦게 오거나 안 와도 15초 뒤엔 퇴근
+        if (a.kind === 'sub' && /handback/i.test(e.tool_name || '')) { a.handedBack = true; a.leaveAt = now + 15; }
         goTo(s, a, d.room, d.pose, d.text, d.tag);
         pushLog(s, a, d.text, ts);
       }
