@@ -297,7 +297,9 @@ function scan() {
   let dirs = [];
   try { dirs = fs.readdirSync(ROOT, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name); } catch {}
   for (const d of dirs) touchProject(d);
-  for (const fp of walk(ROOT, 0, [])) {
+  // 메인 세션 기록을 서브에이전트(agent-*) 기록보다 먼저 읽어야 누가 띄운 서브에이전트인지 이어 붙일 수 있다
+  const isSubFile = fp => path.basename(fp).startsWith('agent-') ? 1 : 0;
+  for (const fp of walk(ROOT, 0, []).sort((x, y) => isSubFile(x) - isSubFile(y))) {
     if (files.has(fp)) continue;
     const base = path.basename(fp, '.jsonl');
     const isSub = base.startsWith('agent-');
