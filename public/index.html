@@ -663,19 +663,25 @@ async function loadSprites() {
     await Promise.all(files.map(f => new Promise(done => {
       // 이름@3-work.png → 캐릭터 '이름', 동시에 최대 3명, 일할 때 쓰는 그림
       const stem = f.replace(/\.[^.]+$/, '');
-      const m = stem.match(/^(.*?)(?:@(\d+))?(?:-(think|work|sleep|walk|sad|left|right))?$/i);
+      const m = stem.match(/^(.*?)(?:@(\d+))?(?:-(think|work|sleep|walk|sad|left|right)(\d*))?$/i);
       const key = m[1].toLowerCase(), count = Math.min(9, Math.max(1, Number(m[2]) || 1)), variant = m[3] ? m[3].toLowerCase() : 'base';
+      const frameNo = m[4] ? Number(m[4]) : 0; // work1, work2… → 차례로 넘기는 애니메이션
       const img = new Image();
       img.onload = () => {
         if (!sets.has(key)) sets.set(key, { count: 1 });
         const set = sets.get(key);
-        set[variant] = img; set.count = Math.max(set.count, count);
+        if (frameNo) (set[variant + 'Frames'] = set[variant + 'Frames'] || [])[frameNo - 1] = img;
+        else set[variant] = img;
+        set.count = Math.max(set.count, count);
         done();
       };
       img.onerror = done;
       img.src = '/characters/' + encodeURIComponent(f);
     })));
-    for (const v of sets.values()) if (!v.base) v.base = v.left || Object.values(v).find(x => x instanceof Image);
+    for (const v of sets.values()) {
+      for (const k of Object.keys(v)) if (k.endsWith('Frames')) v[k] = v[k].filter(Boolean);
+      if (!v.base) v.base = v.left || Object.values(v).find(x => x instanceof Image) || Object.values(v).find(Array.isArray)[0];
+    }
     SPRITES.main = null;
     SPRITES.subs = [...sets.keys()].sort().map(k => ({ ...sets.get(k), id: k }));
     reassignChars();
@@ -782,7 +788,9 @@ function drawSprite(a, t, set) {
   const busy = ['type', 'read', 'plan'].includes(pose);
   const pair = !!set.right;
   const ph = t + a.seed;
-  let img = (pose === 'walk' && set.walk) || (busy && set.work) || (pose === 'think' && set.think)
+  const frames = (walking && set.walkFrames) || (busy && set.workFrames) || (pose === 'think' && set.thinkFrames) || (pose === 'idle' && set.sleepFrames);
+  let img = (frames && frames.length && frames[Math.floor(ph * 3) % frames.length]) // 1초에 3장
+    || (pose === 'walk' && set.walk) || (busy && set.work) || (pose === 'think' && set.think)
     || (pose === 'stuck' && (set.sad || set.think)) || (pose === 'idle' && set.sleep) || null;
   let flip = false;
   if (!img && pair) {
@@ -793,10 +801,12 @@ function drawSprite(a, t, set) {
   if (!img) { img = set.base; flip = a.faceLeft; }
   const bob = walking ? Math.abs(Math.sin(ph * 10)) * 3 : busy ? Math.abs(Math.sin(ph * 5.2)) * 1.6 : 0;
   const tilt = walking ? Math.sin(ph * 10) * 0.12
-    : busy ? (pair ? 0 : Math.sin(ph * 6) * 0.09)
+    : busy ? (pair || set.workFrames ? Math.sin(ph * 3) * 0.04 : Math.sin(ph * 6) * 0.09)
     : Math.sin(ph * 1.6) * 0.05;
   const squash = pose === 'idle' ? 1 + Math.sin(ph * 2) * 0.02 : 1;
-  let w = SPRITE_H * img.width / img.height, h = SPRITE_H;
+  // 애니메이션 장면은 상반신만 크게 잡힌 그림이 많아서 조금 작게 그린다
+  const H0 = frames && frames.includes(img) ? SPRITE_H * 0.85 : SPRITE_H;
+  let w = H0 * img.width / img.height, h = H0;
   if (w > 60) { h *= 60 / w; w = 60; }
   ctx.save();
   ctx.translate(sx, sy);
