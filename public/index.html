@@ -670,8 +670,8 @@ async function loadSprites() {
       img.src = '/characters/' + encodeURIComponent(f);
     })));
     for (const v of sets.values()) if (!v.base) v.base = Object.values(v)[0];
-    SPRITES.main = sets.get('claude') || sets.get('main') || null;
-    SPRITES.subs = [...sets.keys()].filter(k => k !== 'claude' && k !== 'main').sort().map(k => sets.get(k));
+    SPRITES.main = null;
+    SPRITES.subs = [...sets.keys()].sort().map(k => ({ ...sets.get(k), id: k }));
     reassignChars();
   } catch {}
 }
@@ -734,8 +734,8 @@ const PET_EARS = { usagi: 1.35, hachiware: 1.1, momonga: 1.04 };
 const PET_SIZE = new Proxy({}, { get: (_, id) => (PET_GROUP[id] || 0.8) * (PET_EARS[id] || 1) });
 const PET_BASE = 40; // 치이카와가 화면에서 차지하는 키 (월드 픽셀)
 
-function petFor(a) {
-  const all = [PETS.main, ...PETS.subs].filter(Boolean);
+function charFor(a) {
+  const all = charPool();
   return a.charIdx >= 0 && a.charIdx < all.length ? all[a.charIdx] : null;
 }
 const PET_H = 58;
@@ -766,11 +766,7 @@ function drawPet(a, t, pet) {
   a.headScreen = [sx, sy - H + 6];
 }
 
-function spriteSet(a) {
-  const all = [SPRITES.main, ...SPRITES.subs].filter(Boolean);
-  return a.charIdx >= 0 && a.charIdx < all.length ? all[a.charIdx] : null;
-}
-const SPRITE_H = 46;
+const SPRITE_H = 36; // 넣은 그림의 키 (작은 치이카와 친구들과 비슷하게)
 function drawSprite(a, t, set) {
   const [sx, sy] = iso(a.x, a.y, 0);
   const walking = a.path.length > 0;
@@ -821,7 +817,12 @@ const hash = str => { let h = 2166136261; for (const c of String(str)) h = Math.
 // 캐릭터는 세션마다 무작위로 정하되, 같은 세션은 새로고침해도 같은 캐릭터가 나오게 세션 id 로 뽑는다.
 // 사무실에 있는 사람(퇴근하러 걸어가는 중인 사람 포함)과 절대 겹치지 않게 한 칸씩 비켜가고,
 // 남은 캐릭터가 없으면 -1 (기본 고양이로 그린다)
-const charCount = () => [PETS.main, ...PETS.subs].filter(Boolean).length || [SPRITES.main, ...SPRITES.subs].filter(Boolean).length || 11;
+// 출근할 수 있는 캐릭터 전체: 치이카와 펫 + characters/ 폴더에 넣은 그림
+function charPool() {
+  return [...[PETS.main, ...PETS.subs].filter(Boolean).map(p => ({ type: 'pet', v: p })),
+          ...SPRITES.subs.map(v => ({ type: 'sprite', v }))];
+}
+const charCount = () => charPool().length || 11;
 function pickChar(s, key, self) {
   const n = charCount();
   const used = new Set(s.agents.filter(o => o !== self && !o.gone && o.charIdx >= 0).map(o => o.charIdx));
@@ -1278,7 +1279,7 @@ function frame(ts) {
   if (s) for (const a of s.agents) {
     if (!a.path.length && a.spot && a.spot.f && ['type', 'read', 'think'].includes(a.pose)) a.spot.f.users++;
     const onSofa = !a.path.length && a.spot && a.spot.tag === 'sofa'; // 소파는 통짜라서 앉은 사람을 앞에 그린다
-    items.push({ key: a.x + a.y + 0.01 + (onSofa ? 2 : 0), draw: t => { const set = spriteSet(a), pet = !set && petFor(a); set ? drawSprite(a, t, set) : pet ? drawPet(a, t, pet) : drawCat(a, t); } });
+    items.push({ key: a.x + a.y + 0.01 + (onSofa ? 2 : 0), draw: t => { const c = charFor(a); c && c.type === 'pet' ? drawPet(a, t, c.v) : c ? drawSprite(a, t, c.v) : drawCat(a, t); } });
   }
   items.sort((p, q) => p.key - q.key);
   for (const it of items) it.draw(now);
