@@ -663,7 +663,7 @@ async function loadSprites() {
     await Promise.all(files.map(f => new Promise(done => {
       // 이름@3-work.png → 캐릭터 '이름', 동시에 최대 3명, 일할 때 쓰는 그림
       const stem = f.replace(/\.[^.]+$/, '');
-      const m = stem.match(/^(.*?)(?:@(\d+))?(?:-(think|work|sleep|walk|sad))?$/i);
+      const m = stem.match(/^(.*?)(?:@(\d+))?(?:-(think|work|sleep|walk|sad|left|right))?$/i);
       const key = m[1].toLowerCase(), count = Math.min(9, Math.max(1, Number(m[2]) || 1)), variant = m[3] ? m[3].toLowerCase() : 'base';
       const img = new Image();
       img.onload = () => {
@@ -675,7 +675,7 @@ async function loadSprites() {
       img.onerror = done;
       img.src = '/characters/' + encodeURIComponent(f);
     })));
-    for (const v of sets.values()) if (!v.base) v.base = Object.values(v).find(x => x instanceof Image);
+    for (const v of sets.values()) if (!v.base) v.base = v.left || Object.values(v).find(x => x instanceof Image);
     SPRITES.main = null;
     SPRITES.subs = [...sets.keys()].sort().map(k => ({ ...sets.get(k), id: k }));
     reassignChars();
@@ -773,14 +773,29 @@ function drawPet(a, t, pet) {
 }
 
 const SPRITE_H = PET_BASE * 0.8 * 1.1; // 넣은 그림의 키: 치이카와(0.8배)와 같게, 머리 위 잎·장식 몫만큼 조금 더
+// 그림 한 장짜리 캐릭터도 움직여 보이게: 걸을 땐 통통 뛰며 기울고, 일할 땐 좌우로 흔들흔들, 쉴 땐 살랑살랑.
+// 이름-right.png 가 있으면 기본 그림을 '왼쪽 보기', -right 를 '오른쪽 보기'로 써서 뒤집지 않고 바꿔 끼운다
 function drawSprite(a, t, set) {
   const [sx, sy] = iso(a.x, a.y, 0);
   const walking = a.path.length > 0;
   const pose = walking ? 'walk' : a.pose;
-  const img = (pose === 'walk' && set.walk) || (['type', 'read', 'plan'].includes(pose) && set.work) || (pose === 'think' && set.think)
-    || (pose === 'stuck' && (set.sad || set.think)) || (pose === 'idle' && set.sleep) || set.base;
-  const bob = walking ? Math.abs(Math.sin(t * 10 + a.seed)) * 3 : pose === 'type' ? Math.abs(Math.sin(t * 9 + a.seed)) * 1 : 0;
-  const squash = pose === 'idle' ? 1 + Math.sin(t * 2 + a.seed) * 0.02 : 1;
+  const busy = ['type', 'read', 'plan'].includes(pose);
+  const pair = !!set.right;
+  const ph = t + a.seed;
+  let img = (pose === 'walk' && set.walk) || (busy && set.work) || (pose === 'think' && set.think)
+    || (pose === 'stuck' && (set.sad || set.think)) || (pose === 'idle' && set.sleep) || null;
+  let flip = false;
+  if (!img && pair) {
+    if (walking) img = a.faceLeft ? set.base : set.right;
+    else if (busy) img = Math.floor(ph * 2.6) % 2 ? set.right : set.base; // 번갈아 → 좌우로 흔들며 춤추듯
+    else img = a.faceLeft ? set.base : set.right;
+  }
+  if (!img) { img = set.base; flip = a.faceLeft; }
+  const bob = walking ? Math.abs(Math.sin(ph * 10)) * 3 : busy ? Math.abs(Math.sin(ph * 5.2)) * 1.6 : 0;
+  const tilt = walking ? Math.sin(ph * 10) * 0.12
+    : busy ? (pair ? 0 : Math.sin(ph * 6) * 0.09)
+    : Math.sin(ph * 1.6) * 0.05;
+  const squash = pose === 'idle' ? 1 + Math.sin(ph * 2) * 0.02 : 1;
   let w = SPRITE_H * img.width / img.height, h = SPRITE_H;
   if (w > 60) { h *= 60 / w; w = 60; }
   ctx.save();
@@ -788,7 +803,8 @@ function drawSprite(a, t, set) {
   ctx.globalAlpha = a.alpha;
   ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.ellipse(0, 0, w * 0.32, 4, 0, 0, Math.PI * 2); ctx.fill();
   ctx.translate(0, -bob);
-  if (a.faceLeft) ctx.scale(-1, 1);
+  ctx.rotate(tilt);           // 발밑을 축으로 기울인다
+  if (flip) ctx.scale(-1, 1);
   ctx.scale(1, squash);
   ctx.drawImage(img, -w / 2, -h, w, h);
   ctx.restore();
