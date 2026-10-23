@@ -2,6 +2,3 @@ pets/
 node_modules/
 .DS_Store
 *.log
-# 각자 넣는 캐릭터 그림은 올리지 않는다
-characters/*
-!characters/README.txt
