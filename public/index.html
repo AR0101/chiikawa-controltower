@@ -846,23 +846,18 @@ function office() {
 let seedN = 1;
 let curTs = 0; // 처리 중인 이벤트의 시각
 const hash = str => { let h = 2166136261; for (const c of String(str)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
-// 캐릭터는 세션마다 무작위로 정하되, 같은 세션은 새로고침해도 같은 캐릭터가 나오게 세션 id 로 뽑는다.
-// 사무실에 있는 사람(퇴근하러 걸어가는 중인 사람 포함)과 절대 겹치지 않게 한 칸씩 비켜가고,
-// 남은 캐릭터가 없으면 -1 (기본 고양이로 그린다)
-// 출근할 수 있는 캐릭터 전체: 치이카와 펫 + characters/ 폴더에 넣은 그림
-function charPool() {
-  return [...[PETS.main, ...PETS.subs].filter(Boolean).map(p => ({ type: 'pet', v: p })),
-          ...SPRITES.subs.flatMap(v => Array.from({ length: v.count || 1 }, () => ({ type: 'sprite', v })))]; // @3 이면 세 자리
-}
+// 캐릭터는 출근할 때마다 지금 비어 있는 캐릭터 중에서 고르게 무작위로 뽑는다.
+// (세션 id 로 고정하면 오래 쓰는 세션이 늘 같은 캐릭터로 나오고, 겹칠 때 '다음 칸'으로 밀어내면
+//  비어 있는 몇 자리로만 몰려서 특정 캐릭터가 자주 나왔다.) 남은 캐릭터가 없으면 -1 (기본 고양이)
 const charCount = () => charPool().length || 11;
 function pickChar(s, key, self) {
   const n = charCount();
   const used = new Set(s.agents.filter(o => o !== self && !o.gone && o.charIdx >= 0).map(o => o.charIdx));
-  const start = hash(key) % n;
-  for (let i = 0; i < n; i++) if (!used.has((start + i) % n)) return (start + i) % n;
-  return -1;
+  const free = [];
+  for (let i = 0; i < n; i++) if (!used.has(i)) free.push(i);
+  return free.length ? free[Math.floor(Math.random() * free.length)] : -1;
 }
-// 펫 그림을 늦게 불러왔거나 수가 바뀌면, 먼저 온 사람부터 다시 겹치지 않게 나눠 준다
+// 펫 그림을 늦게 불러왔거나 수가 바뀌면, 먼저 온 사람부터 겹치지 않게 다시 나눠 준다
 function reassignChars() {
   const n = charCount();
   for (const s of sessions.values()) {
@@ -870,9 +865,9 @@ function reassignChars() {
     for (const a of s.agents) {
       if (a.gone) continue;
       if (a.charIdx >= 0 && a.charIdx < n && !taken.has(a.charIdx)) { taken.add(a.charIdx); continue; }
-      a.charIdx = -1;
-      const start = hash(a.charKey) % n;
-      for (let i = 0; i < n; i++) if (!taken.has((start + i) % n)) { a.charIdx = (start + i) % n; break; }
+      const free = [];
+      for (let i = 0; i < n; i++) if (!taken.has(i)) free.push(i);
+      a.charIdx = free.length ? free[Math.floor(Math.random() * free.length)] : -1;
       if (a.charIdx >= 0) taken.add(a.charIdx);
     }
   }
