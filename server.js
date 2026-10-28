@@ -446,6 +446,14 @@ booted = true;
 setInterval(poll, POLL_MS);
 setInterval(scan, SCAN_MS);
 
+server.on('error', err => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`! ${PORT} 포트를 이미 다른 프로그램이 쓰고 있습니다. 예전에 켜 둔 관제탑이 있으면 그 터미널에서 Ctrl+C 로 끄고 다시 실행하세요.`);
+    console.error(`  (다른 포트로 켜려면: PORT=4318 node server.js)`);
+    process.exit(1);
+  }
+  throw err;
+});
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`Claude 사무실 관제탑: http://localhost:${PORT}`);
   console.log(`읽는 위치: ${ROOT} (프로젝트 ${projects.size}개, 세션 파일 ${files.size}개)`);

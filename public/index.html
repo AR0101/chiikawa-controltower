@@ -849,6 +849,11 @@ const hash = str => { let h = 2166136261; for (const c of String(str)) h = Math.
 // 캐릭터는 출근할 때마다 지금 비어 있는 캐릭터 중에서 고르게 무작위로 뽑는다.
 // (세션 id 로 고정하면 오래 쓰는 세션이 늘 같은 캐릭터로 나오고, 겹칠 때 '다음 칸'으로 밀어내면
 //  비어 있는 몇 자리로만 몰려서 특정 캐릭터가 자주 나왔다.) 남은 캐릭터가 없으면 -1 (기본 고양이)
+// 출근할 수 있는 캐릭터 전체: 치이카와 펫 + characters/ 폴더에 넣은 그림 (이름@3 이면 세 자리)
+function charPool() {
+  return [...[PETS.main, ...PETS.subs].filter(Boolean).map(p => ({ type: 'pet', v: p })),
+          ...SPRITES.subs.flatMap(v => Array.from({ length: v.count || 1 }, () => ({ type: 'sprite', v })))];
+}
 const charCount = () => charPool().length || 11;
 function pickChar(s, key, self) {
   const n = charCount();
