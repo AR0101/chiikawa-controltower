@@ -9,7 +9,22 @@ const path = require('path');
 const os = require('os');
 
 const PORT = Number(process.env.PORT || 4317);
-const ROOT = process.env.CLAUDE_PROJECTS_DIR || path.join(os.homedir(), '.claude', 'projects');
+// Claude 계정을 CLAUDE_CONFIG_DIR 로 나눠 쓰면(~/.claude-work, ~/.claude-personal …) 기록이 폴더마다 따로 쌓인다.
+// 기본값은 ~/.claude 와 ~/.claude-* 아래 projects 를 모두 읽는다. CLAUDE_PROJECTS_DIR 에 여러 경로를 : 로 이어 줄 수도 있다.
+function findRoots() {
+  if (process.env.CLAUDE_PROJECTS_DIR) return process.env.CLAUDE_PROJECTS_DIR.split(path.delimiter).filter(Boolean).map(p => path.resolve(p));
+  const home = os.homedir();
+  const cands = [path.join(home, '.claude', 'projects')];
+  if (process.env.CLAUDE_CONFIG_DIR) cands.push(path.join(process.env.CLAUDE_CONFIG_DIR, 'projects'));
+  try {
+    for (const d of fs.readdirSync(home, { withFileTypes: true })) {
+      if (d.isDirectory() && d.name.startsWith('.claude-')) cands.push(path.join(home, d.name, 'projects'));
+    }
+  } catch {}
+  const seen = new Set();
+  return cands.map(p => path.resolve(p)).filter(p => !seen.has(p) && seen.add(p) && fs.existsSync(p));
+}
+const ROOTS = findRoots();
 const CODEX_ROOT = path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'sessions');
 const CODEX_RECENT_MS = 3 * 24 * 3600 * 1000; // Codex 기록은 날짜별로 쌓이니 최근 3일 것만 따라간다
 const POLL_MS = 250;
@@ -43,9 +58,10 @@ function textOf(content) {
   return '';
 }
 
+// 같은 폴더에서 work/personal 을 번갈아 써도 프로젝트는 하나로 묶인다 (디렉터리 이름이 같으니까)
 function projectFor(filePath) {
-  const rel = path.relative(ROOT, filePath);
-  return rel.split(path.sep)[0];
+  const root = ROOTS.find(r => filePath.startsWith(r + path.sep)) || ROOTS[0];
+  return path.relative(root, filePath).split(path.sep)[0];
 }
 
 function touchProject(key, line) {
@@ -294,12 +310,12 @@ function scanCodex() {
 }
 
 function scan() {
-  let dirs = [];
-  try { dirs = fs.readdirSync(ROOT, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name); } catch {}
-  for (const d of dirs) touchProject(d);
+  for (const root of ROOTS) {
+    try { for (const d of fs.readdirSync(root, { withFileTypes: true })) if (d.isDirectory()) touchProject(d.name); } catch {}
+  }
   // 메인 세션 기록을 서브에이전트(agent-*) 기록보다 먼저 읽어야 누가 띄운 서브에이전트인지 이어 붙일 수 있다
   const isSubFile = fp => path.basename(fp).startsWith('agent-') ? 1 : 0;
-  for (const fp of walk(ROOT, 0, []).sort((x, y) => isSubFile(x) - isSubFile(y))) {
+  for (const fp of ROOTS.flatMap(r => walk(r, 0, [])).sort((x, y) => isSubFile(x) - isSubFile(y))) {
     if (files.has(fp)) continue;
     const base = path.basename(fp, '.jsonl');
     const isSub = base.startsWith('agent-');
@@ -438,8 +454,8 @@ const server = http.createServer((req, res) => {
   res.writeHead(404); res.end();
 });
 
-if (!fs.existsSync(ROOT)) {
-  console.warn(`! ${ROOT} 가 없습니다. Claude Code를 한 번 이상 실행했는지 확인하세요. (CLAUDE_PROJECTS_DIR 로 경로 지정 가능)`);
+if (!ROOTS.length) {
+  console.warn(`! Claude 기록 폴더(~/.claude/projects)가 없습니다. Claude Code를 한 번 이상 실행했는지 확인하세요. (CLAUDE_PROJECTS_DIR 로 경로 지정 가능)`);
 }
 scan();
 booted = true;
@@ -456,7 +472,7 @@ server.on('error', err => {
 });
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`Claude 사무실 관제탑: http://localhost:${PORT}`);
-  console.log(`읽는 위치: ${ROOT} (프로젝트 ${projects.size}개, 세션 파일 ${files.size}개)`);
+  console.log(`읽는 위치: ${ROOTS.join(', ')} (프로젝트 ${projects.size}개, 세션 파일 ${files.size}개)`);
   console.log(`Codex 기록: ${CODEX_ROOT} (최근 3일 세션 ${[...files.values()].filter(f => f.codex).length}개)`);
   const pets = findPets();
   console.log(pets.size ? `캐릭터: Codex 펫 ${pets.size}마리 (${[...pets.keys()].join(', ')})` : '캐릭터: 기본 고양이 (Codex 펫을 설치하면 그 캐릭터로 바뀝니다)');

@@ -50,6 +50,18 @@ node server.js
 
 ![사무실 전체](docs/overview.png)
 
+## Claude 계정을 나눠 쓸 때
+
+`CLAUDE_CONFIG_DIR` 로 계정을 나눠 쓰면(예: `~/.claude-work`, `~/.claude-personal`) 기록이 폴더마다 따로 쌓입니다. 관제탑은 `~/.claude/projects` 와 `~/.claude-*/projects` 를 모두 찾아 한 사무실에 보여주므로 따로 설정할 것이 없습니다.
+
+같은 폴더에서 두 계정을 번갈아 써도 프로젝트는 하나로 묶이고, 세션마다 캐릭터가 따로 출근합니다.
+
+읽을 폴더를 직접 정하려면 `CLAUDE_PROJECTS_DIR` 에 경로를 `:` 로 이어서 넣습니다 (윈도우는 `;`).
+
+```bash
+CLAUDE_PROJECTS_DIR=~/.claude-work/projects:~/.claude-personal/projects node server.js
+```
+
 ## Codex도 출근
 
 `~/.codex/sessions/` 에 있는 Codex 기록(최근 3일)도 같이 읽습니다. Codex는 Claude와 같은 사무실에 `>_ Codex · 프로젝트` 이름표를 달고 출근합니다.
