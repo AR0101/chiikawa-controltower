@@ -1509,8 +1509,9 @@ pickPalette();
 fit();
 requestAnimationFrame(frame);
 
-const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
-if (isLocal) { loadSprites(); loadPets(); }
-if (isLocal && !/[?&]demo/.test(location.search)) startLive(); else startDemo('DEMO');
+const isTrustedMonitor = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)
+  || location.hostname.endsWith('.ts.net');
+if (isTrustedMonitor) { loadSprites(); loadPets(); }
+if (isTrustedMonitor && !/[?&]demo/.test(location.search)) startLive(); else startDemo('DEMO');
 })();
 </script>
