@@ -195,7 +195,9 @@ function codexMeta(fp) {
     const id = head.match(/"id"\s*:\s*"([0-9a-f]{8}-[0-9a-f-]{27})"/i);
     let dir = cwd[1];
     try { dir = JSON.parse('"' + dir + '"'); } catch {}
-    return { cwd: dir, id: id ? id[1] : '' };
+    // codex exec 나 Codex 가 띄운 서브에이전트는 일을 마치면 끝나는 세션이고, 그냥 codex 로 연 세션은 계속 이어진다
+    const short = /"originator"\s*:\s*"codex_exec"|"source"\s*:\s*"exec"|"subagent"/.test(head.slice(0, 64 * 1024));
+    return { cwd: dir, id: id ? id[1] : '', short };
   } catch {}
   return null;
 }
@@ -236,7 +238,7 @@ function convertCodex(o, f) {
   if (!o || typeof o !== 'object') return out;
   const wrapped = typeof o.type === 'string' && o.payload && typeof o.payload === 'object';
   const p = wrapped ? o.payload : o;
-  const base = { project: f.project, sessionId: f.sessionId, who: 'codex', ts: Date.parse(o.timestamp || '') || Date.now(), agent_id: null };
+  const base = { project: f.project, sessionId: f.sessionId, who: 'codex', short: !!f.short, ts: Date.parse(o.timestamp || '') || Date.now(), agent_id: null };
   const text = c => (Array.isArray(c) ? c.map(x => x.text || '').join(' ') : String(c || '')).trim();
   if (wrapped && o.type === 'event_msg') {
     if (p.type === 'user_message' && p.message && !String(p.message).trim().startsWith('<')) out.push({ ...base, ev: 'Prompt', text: trunc(String(p.message).trim(), 140) });
@@ -298,7 +300,7 @@ function scanCodex() {
     const meta = codexMeta(fp);
     if (!meta) { if (Date.now() - st.mtimeMs > 60000) ignored.add(fp); continue; } // 첫 줄이 아직 안 써졌으면 다음에 다시
     const idFromName = (path.basename(fp, '.jsonl').match(/[0-9a-f]{8}-[0-9a-f-]{27}$/i) || [])[0];
-    const f = { codex: true, project: projectKeyFromCwd(meta.cwd), cwd: meta.cwd, sessionId: 'codex-' + (meta.id || idFromName || path.basename(fp)), offset: 0, rest: '' };
+    const f = { codex: true, project: projectKeyFromCwd(meta.cwd), cwd: meta.cwd, sessionId: 'codex-' + (meta.id || idFromName || path.basename(fp)), short: meta.short, offset: 0, rest: '' };
     files.set(fp, f);
     const proj = touchProject(f.project, { cwd: meta.cwd });
     if (!proj.cwd) { proj.cwd = meta.cwd; proj.name = path.basename(meta.cwd); }

@@ -884,7 +884,11 @@ const projName = key => (floorsMeta.get(key) || {}).name || String(key || '').sp
 const LOOK_ALL = [CLAUDE_LOOK, ...LOOKS];
 function makeAgent(s, kind, name, color, sid, project, charKey) {
   charKey = charKey || (sid || '') + ':' + Math.random();
-  const charIdx = pickChar(s, charKey);
+  // 같은 세션이 다시 출근하면 전에 맡았던 캐릭터를 (비어 있으면) 그대로 쓴다
+  s.charMemo = s.charMemo || new Map();
+  const prev = s.charMemo.get(charKey);
+  const charIdx = prev != null && prev >= 0 && !s.agents.some(o => !o.gone && o.charIdx === prev) ? prev : pickChar(s, charKey);
+  if (charIdx >= 0) s.charMemo.set(charKey, charIdx);
   const a = {
     kind, name, color: projColor(project), project: project || '', task: '', sid: sid || '', charIdx, charKey, lastTs: curTs || Date.now(),
     look: LOOK_ALL[hash(charKey) % LOOK_ALL.length],
@@ -901,6 +905,10 @@ function makeAgent(s, kind, name, color, sid, project, charKey) {
 function mainOf(s, sid, who = 'claude', project) {
   const mains = s.agents.filter(a => a.kind === 'main' && !a.leaving && a.who === who);
   let m = sid ? mains.find(a => a.sid === sid) : mains.find(a => a.project === project) || mains[0];
+  if (!m && sid) { // 퇴근하러 걸어가던 중에 일이 다시 오면 돌아서서 계속 일한다
+    m = s.agents.find(a => a.kind === 'main' && a.leaving && !a.gone && a.sid === sid && a.who === who);
+    if (m) { m.leaving = false; m.path = []; m.spot = null; m.pose = 'idle'; m.bubble = ''; }
+  }
   if (!m) {
     m = makeAgent(s, 'main', who === 'codex' ? 'Codex' : 'Claude', null, sid, project, who + ':' + sid);
     m.who = who;
@@ -1084,8 +1092,9 @@ function handle(e) {
     case 'Stop': {
       const m = mainOf(s, e.sessionId, e.who, e.project);
       goTo(s, m, 'lounge', 'idle', '🍞 작업 끝 · 다음 지시 대기', 'sofa');
-      // Codex 는 codex exec 로 불릴 때마다 새 세션이 생기니, 일을 마치면 잠깐 쉬고 퇴근한다
-      if (m.who === 'codex') m.leaveAt = now + 20;
+      // codex exec 나 Codex 서브에이전트는 불릴 때마다 새 세션이 생기니, 일을 마치면 잠깐 쉬고 퇴근한다.
+      // 그냥 codex 로 연 세션은 Claude 처럼 라운지에서 다음 지시를 기다린다
+      if (m.who === 'codex' && e.short) m.leaveAt = now + 20;
       pushLog(s, m, '작업 끝', ts);
       return;
     }
