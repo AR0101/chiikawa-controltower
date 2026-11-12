@@ -1109,6 +1109,9 @@ function handle(e) {
 }
 
 // ───────── 루프 ─────────
+// 라운지에서 이만큼 조용하면 퇴근. 오래 걸리는 명령을 돌리는 중(도구 결과를 기다리는 중)이면 15분까지 기다린다
+const LOUNGE_MS = 5 * 60000, BUSY_MS = 15 * 60000;
+const quietLimit = (s, a) => { for (const x of s.tools.values()) if (x === a) return BUSY_MS; return LOUNGE_MS; };
 const SPEED = 3.4;
 function update(s, dt) {
   for (const a of s.agents) {
@@ -1129,7 +1132,8 @@ function update(s, dt) {
   const before = s.agents.length;
   s.agents = s.agents.filter(a => !a.gone);
   if (before !== s.agents.length) dirtyPanels = true;
-  // 세션마다: 45초 조용하면 라운지로, 15분 조용하면 퇴근 (/clear 로 버려진 세션도 이렇게 정리된다)
+  // 세션마다: 45초 조용하면 라운지로, 5분 조용하면 퇴근 (/clear 로 버려진 세션도 이렇게 정리된다).
+  // 다시 일이 오면 전에 맡았던 캐릭터로 다시 출근한다
   for (const m of s.agents) {
     if (m.leaving || m.path.length) continue;
     if (m.leaveAt && now > m.leaveAt) {
@@ -1142,7 +1146,7 @@ function update(s, dt) {
       continue;
     }
     const quiet = Date.now() - m.lastTs;
-    if (quiet > 15 * 60000) { leave(s, m, '퇴근 🛗'); dirtyPanels = true; }
+    if (quiet > quietLimit(s, m)) { leave(s, m, '퇴근 🛗'); dirtyPanels = true; }
     else if (quiet > 45000 && m.pose !== 'idle' && !(m.spot && m.spot.room === 'lounge')) { goTo(s, m, 'lounge', 'idle', '🍞 식빵 굽는 중', 'sofa'); dirtyPanels = true; }
   }
 }
@@ -1386,7 +1390,7 @@ function startLive() {
         if (Date.now() - s.lastEvent > 30 * 60000) s.agents = [];
         else for (const a of s.agents) {
           const quiet = Date.now() - a.lastTs;
-          if ((a.kind === 'sub' && quiet > 90000) || quiet > 15 * 60000 || a.leaveAt || a.handedBack) a.gone = true;
+          if ((a.kind === 'sub' && quiet > 90000) || quiet > quietLimit(s, a) || a.leaveAt || a.handedBack) a.gone = true;
         }
         s.agents = s.agents.filter(a => !a.gone);
       }
