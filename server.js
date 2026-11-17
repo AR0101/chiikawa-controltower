@@ -18,7 +18,8 @@ function findRoots() {
   if (process.env.CLAUDE_CONFIG_DIR) cands.push(path.join(process.env.CLAUDE_CONFIG_DIR, 'projects'));
   try {
     for (const d of fs.readdirSync(home, { withFileTypes: true })) {
-      if (d.isDirectory() && d.name.startsWith('.claude-')) cands.push(path.join(home, d.name, 'projects'));
+      // ~/.claude-personal.bak-… 같은 백업 폴더는 같은 세션이 한 번 더 읽혀서 빼고 읽는다
+      if (d.isDirectory() && d.name.startsWith('.claude-') && !/(\.|-|_)(bak|backup|old|orig|copy)\b|\bbak\b/i.test(d.name)) cands.push(path.join(home, d.name, 'projects'));
     }
   } catch {}
   const seen = new Set();
@@ -478,4 +479,8 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`Codex 기록: ${CODEX_ROOT} (최근 3일 세션 ${[...files.values()].filter(f => f.codex).length}개)`);
   const pets = findPets();
   console.log(pets.size ? `캐릭터: Codex 펫 ${pets.size}마리 (${[...pets.keys()].join(', ')})` : '캐릭터: 기본 고양이 (Codex 펫을 설치하면 그 캐릭터로 바뀝니다)');
+  let pics = [];
+  try { pics = [...new Set(fs.readdirSync(CHAR_DIR).filter(n => /\.(png|gif|webp|jpe?g)$/i.test(n)).map(n => n.replace(/(-[a-z]+\d*)?\.[^.]+$/i, '')))]; } catch {}
+  if (pics.length) console.log(`내 그림: ${pics.join(', ')}`);
+  console.log('브라우저는 http://localhost 주소로 여세요. 다른 주소로 열면 캐릭터 없이 데모 화면만 보입니다 (Tailscale 의 .ts.net 주소는 됩니다).');
 });

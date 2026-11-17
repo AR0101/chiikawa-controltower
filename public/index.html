@@ -860,7 +860,17 @@ function pickChar(s, key, self) {
   const used = new Set(s.agents.filter(o => o !== self && !o.gone && o.charIdx >= 0).map(o => o.charIdx));
   const free = [];
   for (let i = 0; i < n; i++) if (!used.has(i)) free.push(i);
-  return free.length ? free[Math.floor(Math.random() * free.length)] : -1;
+  if (free.length) return free[Math.floor(Math.random() * free.length)];
+  return leastUsed(s.agents.filter(o => o !== self && !o.gone), n);
+}
+// 캐릭터가 다 출근해 있으면 고양이 대신, 지금 가장 적게 나와 있는 캐릭터를 한 명 더 출근시킨다
+function leastUsed(agents, n) {
+  if (!n || !charPool().length) return -1;
+  const cnt = new Array(n).fill(0);
+  for (const o of agents) if (o.charIdx >= 0 && o.charIdx < n) cnt[o.charIdx]++;
+  const min = Math.min(...cnt);
+  const pick = cnt.map((c, i) => c === min ? i : -1).filter(i => i >= 0);
+  return pick[Math.floor(Math.random() * pick.length)];
 }
 // 펫 그림을 늦게 불러왔거나 수가 바뀌면, 먼저 온 사람부터 겹치지 않게 다시 나눠 준다
 function reassignChars() {
@@ -872,7 +882,7 @@ function reassignChars() {
       if (a.charIdx >= 0 && a.charIdx < n && !taken.has(a.charIdx)) { taken.add(a.charIdx); continue; }
       const free = [];
       for (let i = 0; i < n; i++) if (!taken.has(i)) free.push(i);
-      a.charIdx = free.length ? free[Math.floor(Math.random() * free.length)] : -1;
+      a.charIdx = free.length ? free[Math.floor(Math.random() * free.length)] : leastUsed(s.agents.filter(o => o !== a && !o.gone && o.charIdx >= 0), n);
       if (a.charIdx >= 0) taken.add(a.charIdx);
     }
   }
